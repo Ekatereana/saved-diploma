@@ -32,7 +32,7 @@ for author in unique_owns_by_values:
     bigrams_info = ngrams_info(author_df['text'], n=2)
     bigrams_per_author.append((author, bigrams_info)) 
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.QUARTZ])
 
 pie_chart_card = dbc.Card(
     [
@@ -63,7 +63,7 @@ app.layout = html.Div([
                                 [
                                     dbc.Col(html.Img(src=PLOTLY_LOGO, height="30px")),
                                     dbc.Col(
-                                        dbc.NavbarBrand("Україномовне NLP", className="ml-2")
+                                        dbc.NavbarBrand("Multilingual NLP classifier", className="ml-2")
                                     ),
                                 ],
                                 align="center",

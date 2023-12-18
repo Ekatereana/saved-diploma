@@ -19,6 +19,9 @@ import re
 import random
 from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
 from uk_stemmer import UkStemmer
+import nltk
+
+nltk.download('punkt')
 
 desired_width = 320
 pd.set_option("display.max_columns", 20)
@@ -65,7 +68,7 @@ def owns_by(user, text):
     if 'Ши' in user: return 1
     if 'Ni' in user: return 2
 
-import nltk
+
 
 def preprocess_data():
     file_path = './data/processed-messages.json'
@@ -192,15 +195,15 @@ def nltk_classifiers(dataframe,X_column,y_column,classifier=nltk.NaiveBayesClass
     print(confmat)
     return classifier       
                       
+
 def main():
 
-    
     comp_df = preprocess_data()
 
-    classifiers=[nltk.NaiveBayesClassifier]
+    classifiers=[nltk.NaiveBayesClassifier,nltk.MaxentClassifier,nltk.DecisionTreeClassifier]
     y_column = 'owns_by'
     for classifier in classifiers:
-        for n in (1,3):
+        for n in (1,5):
             print ('Класифікатор -',classifier)
             print ('Порядок n -',n)           
             print ('Класифікатор за колонкою -',y_column) 
@@ -208,10 +211,5 @@ def main():
             if classifier==nltk.NaiveBayesClassifier:
                 print ('Найважливіші токени для класифікації за колонкою -',y_column)
                 model.show_most_informative_features(10) 
-
-    
-
-
-
 if __name__ == "__main__":
     main()

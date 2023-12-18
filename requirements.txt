@@ -1,0 +1,12 @@
+pandas==2.1.4
+plotly==5.18.0
+scikit-learn
+nltk==3.8.1
+uk_stemmer @ git+https://github.com/Desklop/Uk_Stemmer 
+flask
+dash
+matplotlib.colors
+dash_bootstrap_components 
+numpy 
+wordcloud
+datetime
