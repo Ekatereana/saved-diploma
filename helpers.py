@@ -11,6 +11,7 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 sh.setFormatter(formatter)
 root_logger.addHandler(sh)
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 from sklearn.manifold import TSNE
@@ -20,12 +21,30 @@ import random
 from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
 from uk_stemmer import UkStemmer
 import nltk
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import TruncatedSVD
 
 nltk.download('punkt')
 
 desired_width = 320
 pd.set_option("display.max_columns", 20)
 pd.set_option("display.width", desired_width)
+author_dict = {}
+AUTHOR_COUNDER = 0
+CHAT_FILE_PATH = './data/processed-messages-v1.json'
+JAVA_KPI_FILE_PATH = './data/processed-messages-kpi-java.json'
+
+def load_stopwords():
+    with open('sources/stopwords_ua.txt', encoding='utf-8') as file:
+        stopwords_ua = file.read().splitlines()
+    with open('sources/stopwords_ru.txt', encoding='utf-8') as file:
+        stopwords_ru = file.read().splitlines()
+    return set(stopwords_ua).union(set(stopwords_ru))
+
+
+stop_words = load_stopwords()
+
+# DATA PREPROCESSING
 
 def get_media_mapping(media_type):
     if media_type == "sticker" :return 1
@@ -50,28 +69,20 @@ def get_message_class(media_type, photo_attached):
     if not bool(media_type): return 0
     return get_media_mapping(media_type)
 
-def owns_by(user, text):
+def owns_by(user):
     
-    """returns class identifier of the message
-    0 - mention java, spring, typescript, мальчики, орунькаю
-    1 - rust, аніме, ахахахаха, сед, кричу
-    2 - docker, kuber, microservice, докер, кубер, eбо
+    """returns author class identifier of the message
     """
-    java = ["java", "spring", "typescript", "мальчики", "орунькаю"]
-    rust = ["rust", "раст" "аніме", "аха", "сед", "кричу", "ex"]
-    docker = ["docker", "kuber", "microservice", "докер", "кубер", "eбо"]
-    if any(substring in text for substring in java): return 0
-    if any(substring in text for substring in rust): return 1
-    if any(substring in text for substring in docker): return 2
+    global AUTHOR_COUNDER
+    if user not in author_dict: 
+        author_dict[user] = AUTHOR_COUNDER
+        AUTHOR_COUNDER = AUTHOR_COUNDER + 1
     
-    if 'Gri' in user: return 0
-    if 'Ши' in user: return 1
-    if 'Ni' in user: return 2
+    return author_dict[user] 
 
 
 
-def preprocess_data():
-    file_path = './data/processed-messages.json'
+def preprocess_data(file_path):
 
     with open(file_path, encoding='UTF-8') as data_file:
         data = json.load(data_file)
@@ -80,7 +91,7 @@ def preprocess_data():
     comp_df = comp_df[["id", "type", "from", "text", "media_type", "photo", "date"]].fillna("")
 
     # Apply the transformations and fill NaN values with 0
-    comp_df["owns_by"] = comp_df.apply(lambda x: owns_by(x["from"], x["text"]), axis=1)
+    comp_df["owns_by"] = comp_df.apply(lambda x: owns_by(x["from"]), axis=1)
     comp_df["message_class"] = comp_df.apply(lambda x: get_message_class(x["media_type"], x["photo"]), axis=1)
 
     # Fill NaN values with 0 in specific columns
@@ -88,6 +99,8 @@ def preprocess_data():
     comp_df[columns_to_fill] = comp_df[columns_to_fill].fillna(0)
     comp_df['text'] = comp_df['text'].astype(str)
     return comp_df
+
+# BAG OF WORDS AND CLASSIFICATION
 
 def ua_tokenizer(text,ua_stemmer=True,stop_words=[]):
     """ Tokenizer for Ukrainian language, returns only alphabetic tokens. 
@@ -113,7 +126,6 @@ def ua_tokenizer(text,ua_stemmer=True,stop_words=[]):
                 tokenized_list.append(word) 
     return tokenized_list
 
-stop_words = ["я", "ты", "мы", "а", "і", "у", "там", "як", "как", "то", "не", "в", "что", "ну", "це", "що", "там", "для", "с", "да", "но", "по", "на", "и", "так"]
 
 def ngrams_info(series,n=1,most_common=50,ua_stemmer=True,stop_words=stop_words):
     """ ngrams_info - Show detailed information about string pandas.Series column. 
@@ -195,11 +207,35 @@ def nltk_classifiers(dataframe,X_column,y_column,classifier=nltk.NaiveBayesClass
     print(confmat)
     return classifier       
                       
+# CLASTERISATION
 
-def main():
+def wrap_on_ua_tokenizer(text):
+    return ua_tokenizer(text,ua_stemmer=True,stop_words=stop_words)
 
-    comp_df = preprocess_data()
+ua_tone_dict = pd.read_csv('https://raw.githubusercontent.com/lang-uk/tone-dict-uk/master/tone-dict-uk.tsv', delimiter='\t', names=['word', 'score'], index_col=0)
+ru_tone_dict = pd.read_csv('https://raw.githubusercontent.com/text-machine-lab/sentimental/master/sentimental/word_list/russian.csv', delimiter=',', index_col=0)
+union_tone_dict = pd.concat([ua_tone_dict, ru_tone_dict])
+stemmed_index = union_tone_dict.index.map(UkStemmer().stem_word)
+union_tone_dict = pd.DataFrame( union_tone_dict.values, index = stemmed_index )
 
+def calculate_sentiment(words):
+    tone_words = [word for word in words if word in union_tone_dict.index]
+    if len(words) == 0: 
+        return 0
+    return sum([union_tone_dict.loc[word][0] if word in union_tone_dict.index else 0 for word in words])/len(words)
+
+def get_topic_words(vectorizer, svd, n_top_words):
+    words = vectorizer.get_feature_names_out()
+    topics = []
+    for component in svd.components_:
+        top_words_idx = np.argsort(component)[::-1][:n_top_words]
+        top_words = [words[i] for i in top_words_idx]
+        topics.append(top_words)
+    return topics
+
+#  DATA TESTING
+
+def classification_test(comp_df):
     classifiers=[nltk.NaiveBayesClassifier,nltk.MaxentClassifier,nltk.DecisionTreeClassifier]
     y_column = 'owns_by'
     for classifier in classifiers:
@@ -211,5 +247,30 @@ def main():
             if classifier==nltk.NaiveBayesClassifier:
                 print ('Найважливіші токени для класифікації за колонкою -',y_column)
                 model.show_most_informative_features(10) 
+
+def topics_test(comp_df):
+    # print(comp_df.head(10))
+    comp_df['tokens'] = comp_df.text.apply(wrap_on_ua_tokenizer)
+    # print(comp_df.head(10))
+    comp_df['tone'] = comp_df.tokens.apply(calculate_sentiment)
+    comp_df['clean_text'] = comp_df.tokens.str.join(' ')
+
+    tfidf_vectorizer = TfidfVectorizer()
+    X = tfidf_vectorizer.fit_transform(comp_df.clean_text)
+    svd_vectorizer = TruncatedSVD(n_components=100, random_state=42)
+    X_lsa = svd_vectorizer.fit_transform(X)
+    print(X_lsa)
+
+    topics = get_topic_words(tfidf_vectorizer, svd_vectorizer, 10)
+    for i, topic in enumerate(topics):
+        print(f'Topic {i}: {", ".join(topic)}')
+
+
+def main():
+
+    comp_df = preprocess_data(JAVA_KPI_FILE_PATH)
+    topics_test(comp_df)
+
+    
 if __name__ == "__main__":
     main()

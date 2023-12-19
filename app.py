@@ -1,10 +1,9 @@
-import flask
 import dash
-from dash import dash_table, Dash, dcc, html, Input, Output, callback
+from dash import dcc, html, Input, Output, callback
 import matplotlib.colors as mcolors
 import dash_bootstrap_components as dbc
 from sklearn.manifold import TSNE
-from helpers import ngrams_info, preprocess_data, stop_words
+from helpers import ngrams_info, preprocess_data, stop_words, author_dict, JAVA_KPI_FILE_PATH
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -17,9 +16,9 @@ import itertools
 
 PLOTLY_LOGO = "https://images.plot.ly/logo/new-branding/plotly-logomark.png"
 
-pre_df = preprocess_data()
+pre_df = preprocess_data(JAVA_KPI_FILE_PATH)
 vects_df = ngrams_info(pre_df['text'], n=2) 
-col_pal = px.colors.sequential.Oryel
+col_pal = px.colors.sequential.Pinkyl
 
 unique_owns_by_values = pre_df['owns_by'].unique()
 
@@ -32,38 +31,45 @@ for author in unique_owns_by_values:
     bigrams_info = ngrams_info(author_df['text'], n=2)
     bigrams_per_author.append((author, bigrams_info)) 
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.QUARTZ])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.PULSE])
 
 pie_chart_card = dbc.Card(
     [
         dbc.CardHeader(html.H5("Pie Chart by Classes and Categories")),
         dbc.CardBody(
             [
-                html.Label("Select a Class:"),
-                dcc.Dropdown(
+                dbc.Label("Select a Class:"),
+                dbc.Select(
                     id="class-dropdown",
                     options=[
                         {"label": "Автор", "value": "owns_by"},
                         {"label": "Тип повідомлення", "value": "message_class"},
                     ],
                     value="owns_by",  # Default selection
+                    
                 ),
-                dcc.Graph(id="pie-chart"),
-            ]
+                dbc.Row(
+                    
+                    dcc.Graph(id="pie-chart"),
+                    style={"marginTop": "20px"} 
+                ),
+                
+            ],
+            style={"marginBottom": "20px"} 
         ),
     ],
     style={"marginBottom": "20px"}  # Add space between cards
 )
 
-app.layout = html.Div([
-        dbc.Navbar(
+navbar = dbc.Navbar(
                     children=[
                         html.A(
                             dbc.Row(
                                 [
-                                    dbc.Col(html.Img(src=PLOTLY_LOGO, height="30px")),
+                                    dbc.Col(html.Img(src='./assets/web.png', height="30px")),
                                     dbc.Col(
-                                        dbc.NavbarBrand("Multilingual NLP classifier", className="ml-2")
+                                        dbc.NavbarBrand("Multilingual NLP classifier", className="ml-2"),
+                                        style={"marginLeft": "20px"}
                                     ),
                                 ],
                                 align="center",
@@ -71,10 +77,49 @@ app.layout = html.Div([
                             href="https://plot.ly",
                         )
                     ],
-                    color="dark",
-                    dark=True,
                     sticky="top",
-                ),
+                    color="purpule",
+                    class_name="navbar navbar-expand-lg bg-primary"
+                )
+
+nodes = [
+    {
+        'data': {'id': short, 'label': label},
+        'position': {'x': 20 * lat, 'y': -20 * long}
+    }
+    for short, label, long, lat in (
+        ('la', 'Los Angeles', 34.03, -118.25),
+        ('nyc', 'New York', 40.71, -74),
+        ('to', 'Toronto', 43.65, -79.38),
+        ('mtl', 'Montreal', 45.50, -73.57),
+        ('van', 'Vancouver', 49.28, -123.12),
+        ('chi', 'Chicago', 41.88, -87.63),
+        ('bos', 'Boston', 42.36, -71.06),
+        ('hou', 'Houston', 29.76, -95.37)
+    )
+]
+
+edges = [
+    {'data': {'source': source, 'target': target}}
+    for source, target in (
+        ('van', 'la'),
+        ('la', 'chi'),
+        ('hou', 'chi'),
+        ('to', 'mtl'),
+        ('mtl', 'bos'),
+        ('nyc', 'bos'),
+        ('to', 'hou'),
+        ('to', 'nyc'),
+        ('la', 'nyc'),
+        ('nyc', 'bos')
+    )
+]
+
+elements = nodes + edges
+
+
+app.layout = html.Div([
+        navbar,
         dbc.Container([
             dbc.Row(
                 dbc.Col(
@@ -206,6 +251,7 @@ app.layout = html.Div([
                                                             )
                                                         ],
                                                         md=6,
+                                                        className="form-select"
                                                     ),
                                                     dbc.Col(
                                                         [
@@ -234,9 +280,19 @@ app.layout = html.Div([
 
                     )
                 )
+            ),
+            dbc.Row(
+                cyto.Cytoscape(
+                    id='cytoscape-layout-1',
+                    elements=elements,
+                    style={'width': '100%', 'height': '350px'},
+                    layout={
+                        'name': 'preset'
+                    }
+                )
             )
         ],
-        className="mt-12",
+        className="mt-12 dbc",
         )
     ]
 )
@@ -247,11 +303,12 @@ app.layout = html.Div([
     Input("class-dropdown", "value")
 )
 def update_pie_chart(selected_class):
+    anonimized = {}
+    for author, category in author_dict.items():
+        anonimized[category] = f"Автор {category}"
+
     if selected_class == 'owns_by':
-        expl_lables = {
-            0: "Автор 0", 
-            1: "Автор 1",
-            2: "Автор 2"}
+        expl_lables = anonimized
         label = 'Автор'
     else:
         expl_lables = {

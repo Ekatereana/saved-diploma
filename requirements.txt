@@ -10,3 +10,5 @@ dash_bootstrap_components
 numpy 
 wordcloud
 datetime
+dash-renderer
+dash_cytoscape
