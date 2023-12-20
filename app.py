@@ -3,7 +3,7 @@ from dash import dcc, html, Input, Output, callback
 import matplotlib.colors as mcolors
 import dash_bootstrap_components as dbc
 from sklearn.manifold import TSNE
-from helpers import ngrams_info, preprocess_data, stop_words, author_dict, JAVA_KPI_FILE_PATH
+from helpers import ngrams_info, preprocess_data, stop_words, author_dict, extract_topics, CHAT_FILE_PATH, JAVA_KPI_FILE_PATH
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -13,14 +13,13 @@ import re
 from datetime import datetime
 from dateutil import relativedelta
 import itertools
+import dash_cytoscape as cyto
 
-PLOTLY_LOGO = "https://images.plot.ly/logo/new-branding/plotly-logomark.png"
-
-pre_df = preprocess_data(JAVA_KPI_FILE_PATH)
-vects_df = ngrams_info(pre_df['text'], n=2) 
 col_pal = px.colors.sequential.Pinkyl
-
+# vects_df = ngrams_info(pre_df['text'], n=2) 
+pre_df = preprocess_data(CHAT_FILE_PATH)
 unique_owns_by_values = pre_df['owns_by'].unique()
+
 
 # Initialize an empty list to store the results
 bigrams_per_author = []
@@ -31,11 +30,72 @@ for author in unique_owns_by_values:
     bigrams_info = ngrams_info(author_df['text'], n=2)
     bigrams_per_author.append((author, bigrams_info)) 
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.PULSE])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SUPERHERO])
 
+navbar = dbc.Navbar(
+                    children=[
+                        html.A(
+                            dbc.Row(
+                                [
+                                    dbc.Col(html.Img(src='./assets/web.png', height="55px"), style={"marginLeft": "15px"}),
+                                    dbc.Col(
+                                        dbc.NavbarBrand("Мультилінгвістичний NLP класифікатор", className="ml-2"),
+                                        style={"marginLeft": "5px"}
+                                    ),
+                                ],
+                                align="center",
+                            ),
+                            href="https://plot.ly",
+                        )
+                    ],
+                    sticky="top",
+                    dark=True,
+                    color="orange",
+                    class_name="navbar navbar-expand-lg bg-primary"
+                )
+persentage_of_data_set = dbc.Card(
+                [dbc.CardBody(
+                        dbc.Row(
+                            dbc.Col(
+                                html.Div(
+                                    [
+                                        html.Label("Відсоток даних, що включено в навчання", className="lead"),
+                                        html.P(
+                                            "(Чим менше тим швидше. Вищий відсоток буде мати більшу точність)",
+                                            style={"fontSize": 10, "font-weight": "lighter"},
+                                        ),
+                                        dcc.Slider(
+                                            id="n-selection-slider",
+                                            min=1,
+                                            max=100,
+                                            step=1,
+                                            marks={
+                                                0: "0%",
+                                                10: "",
+                                                20: "20%",
+                                                30: "",
+                                                40: "40%",
+                                                50: "",
+                                                60: "60%",
+                                                70: "",
+                                                80: "80%",
+                                                90: "",
+                                                100: "100%",
+                                            },
+                                            value=20,
+                                        ),
+                                    ]
+                                ),
+                                width={"size": 12},
+                            ),
+                            style={"marginTop": 30, "marginBottom": "20px"},
+                        ),
+                )],
+                style={"marginBottom": "20px", "marginTop": "20px"} 
+            )
 pie_chart_card = dbc.Card(
     [
-        dbc.CardHeader(html.H5("Pie Chart by Classes and Categories")),
+        dbc.CardHeader(html.H5("Кругова діаграма за классами")),
         dbc.CardBody(
             [
                 dbc.Label("Select a Class:"),
@@ -43,7 +103,7 @@ pie_chart_card = dbc.Card(
                     id="class-dropdown",
                     options=[
                         {"label": "Автор", "value": "owns_by"},
-                        {"label": "Тип повідомлення", "value": "message_class"},
+                        {"label": "Клас повідомлення", "value": "message_class"},
                     ],
                     value="owns_by",  # Default selection
                     
@@ -59,104 +119,45 @@ pie_chart_card = dbc.Card(
         ),
     ],
     style={"marginBottom": "20px"}  # Add space between cards
-)
-
-navbar = dbc.Navbar(
-                    children=[
-                        html.A(
-                            dbc.Row(
-                                [
-                                    dbc.Col(html.Img(src='./assets/web.png', height="30px")),
-                                    dbc.Col(
-                                        dbc.NavbarBrand("Multilingual NLP classifier", className="ml-2"),
-                                        style={"marginLeft": "20px"}
-                                    ),
-                                ],
-                                align="center",
-                            ),
-                            href="https://plot.ly",
-                        )
-                    ],
-                    sticky="top",
-                    color="purpule",
-                    class_name="navbar navbar-expand-lg bg-primary"
-                )
-
-nodes = [
-    {
-        'data': {'id': short, 'label': label},
-        'position': {'x': 20 * lat, 'y': -20 * long}
-    }
-    for short, label, long, lat in (
-        ('la', 'Los Angeles', 34.03, -118.25),
-        ('nyc', 'New York', 40.71, -74),
-        ('to', 'Toronto', 43.65, -79.38),
-        ('mtl', 'Montreal', 45.50, -73.57),
-        ('van', 'Vancouver', 49.28, -123.12),
-        ('chi', 'Chicago', 41.88, -87.63),
-        ('bos', 'Boston', 42.36, -71.06),
-        ('hou', 'Houston', 29.76, -95.37)
-    )
-]
-
-edges = [
-    {'data': {'source': source, 'target': target}}
-    for source, target in (
-        ('van', 'la'),
-        ('la', 'chi'),
-        ('hou', 'chi'),
-        ('to', 'mtl'),
-        ('mtl', 'bos'),
-        ('nyc', 'bos'),
-        ('to', 'hou'),
-        ('to', 'nyc'),
-        ('la', 'nyc'),
-        ('nyc', 'bos')
-    )
-]
-
-elements = nodes + edges
+ )
+topics_chart = dbc.Card(
+    [
+        dbc.CardHeader(html.H5("Розподіл тем по датасету")),
+        dbc.CardBody(
+            [ 
+                dbc.Row(
+                    [
+                        dbc.Col(
+                        [   dbc.Label("Введіть бажану кількість топіків"),
+                            dbc.Input(id="topic-amount-input", placeholder="Ввід...", type="number", value = 10),
+                        ]), 
+                        html.Br(),
+                        dbc.Col(
+                        [   dbc.Label("Введіть кількість визначних ознак для теми"),
+                            dbc.Input(id="feature-amount-input", placeholder="Ввід...", type="number", value = 5),
+                        ]), 
+                    ]
+                ),
+                dbc.Row(
+                    [dbc.Col(dcc.Graph(id="topics_features")),
+                    dbc.Col(dcc.Graph(id="topics_heatmap"))],
+                    style={"marginTop": "20px"} 
+                ),
+                
+            ],
+            style={"marginBottom": "20px"} 
+        ),
+    ],
+    style={"marginBottom": "20px"}  # Add space between cards
+ )
 
 
 app.layout = html.Div([
         navbar,
         dbc.Container([
-            dbc.Row(
-                dbc.Col(
-                    html.Div(
-                        [
-                            html.Label("Відсоток даних, що включено в навчання", className="lead"),
-                            html.P(
-                                "(Чим менше тим швидше. Вищий відсоток буде мати більшу точність)",
-                                style={"fontSize": 10, "font-weight": "lighter"},
-                            ),
-                            dcc.Slider(
-                                id="n-selection-slider",
-                                min=1,
-                                max=100,
-                                step=1,
-                                marks={
-                                    0: "0%",
-                                    10: "",
-                                    20: "20%",
-                                    30: "",
-                                    40: "40%",
-                                    50: "",
-                                    60: "60%",
-                                    70: "",
-                                    80: "80%",
-                                    90: "",
-                                    100: "100%",
-                                },
-                                value=20,
-                            ),
-                        ]
-                    ),
-                    width={"size": 12},
-                ),
-                style={"marginTop": 30, "marginBottom": "20px"},
-            ),
+            persentage_of_data_set,
             pie_chart_card,
+            topics_chart,
             dbc.Row(
                 dbc.Col(
                     dbc.Card(
@@ -184,15 +185,15 @@ app.layout = html.Div([
                                                     dcc.Tabs(
                                                         id="tabs",
                                                         children=[
-                                                            dcc.Tab(
-                                                                label="Карта слів",
-                                                                children=[
-                                                                    dcc.Loading(
+                                                        
+                                                                    dcc.Tab(
+                                                                    label="Карта слів",
+                                                                    children=[
+                                                                        dcc.Loading(
                                                                         id="loading-treemap",
-                                                                        children=[dcc.Graph(id="bank-treemap")],
-                                                                        type="default",
-                                                                    )
-                                                                ],
+                                                                        children = [dcc.Graph(id="bank-treemap")],
+                                                                        type="default")]
+                                                                
                                                             ),
                                                             dcc.Tab(
                                                                 label="Хмара слів",
@@ -209,7 +210,7 @@ app.layout = html.Div([
                                                         ],
                                                     )
                                                 ],
-                                                md=8,
+                                                md=8
                                             ),
                                         ]
                                     )
@@ -251,7 +252,7 @@ app.layout = html.Div([
                                                             )
                                                         ],
                                                         md=6,
-                                                        className="form-select"
+                                                        style = {"marginBottom": "20px"}
                                                     ),
                                                     dbc.Col(
                                                         [
@@ -265,8 +266,10 @@ app.layout = html.Div([
                                                             )
                                                         ],
                                                         md=6,
+                                                        style = {"marginBottom": "20px"}
                                                     ),
-                                                ]
+                                                ],
+                                                align = "center",
                                             ),
                                             dcc.Graph(id="bigrams-comps"),
                                         ],
@@ -281,18 +284,8 @@ app.layout = html.Div([
                     )
                 )
             ),
-            dbc.Row(
-                cyto.Cytoscape(
-                    id='cytoscape-layout-1',
-                    elements=elements,
-                    style={'width': '100%', 'height': '350px'},
-                    layout={
-                        'name': 'preset'
-                    }
-                )
-            )
         ],
-        className="mt-12 dbc",
+        className="mt-12",
         )
     ]
 )
@@ -471,27 +464,6 @@ def update_wordcloud_plot(value):
     print("redrawing bank-wordcloud...done")
     return (wordcloud, frequency_figure, treemap, alert_style)
 
-    """
-    Depending on our dataset, we need to populate the time-slider
-    with different ranges. This function does that and returns the
-    needed data to the time-window-slider.
-    """
-    value += 0
-    min_date = pre_df["date"].min()
-    max_date = pre_df["date"].max()
-
-    marks = make_marks_time_slider(min_date, max_date)
-    min_epoch = list(marks.keys())[0]
-    max_epoch = list(marks.keys())[-1]
-
-    return (
-        marks,
-        min_epoch,
-        max_epoch,
-        (max_epoch - min_epoch) / (len(list(marks.keys())) * 3),
-        [min_epoch, max_epoch],
-    )
-
 def vector_to_string(vector):
     return '_'.join(map(str, vector))
 
@@ -529,6 +501,99 @@ def comp_bigram_comparisons(comp_first, comp_second):
     fig.update_yaxes(title="", showticklabels=False)
     fig.data[0]["hovertemplate"] = fig.data[0]["hovertemplate"][:-14]
     return fig
+
+def topic_heatmap(topics_df):
+
+    n_topics = len(topics_df)
+    user_topic_counts = pd.pivot_table(data=tweets_df, 
+                                   values='text', 
+                                   index='from', 
+                                   columns='topic', 
+                                   aggfunc='count',
+                                   fill_value=0)
+
+    user_topic_counts.columns = ['Topic {}'.format(i) for i in range(n_topics)]
+
+        # add column to sum total topics 
+    user_topic_counts['total_topics'] =  user_topic_counts.sum(axis=1)
+
+    # convert topic counts to percentages for each news source 
+    user_topic_counts_pct =  user_topic_counts.apply(lambda x: (x / user_topic_counts['total_topics']))
+    user_topic_counts_pct = user_topic_counts_pct.drop(columns=['total_topics'])
+
+    # store value z-values
+    z_usr = user_topic_counts_pct.values.tolist()
+
+    # create list of hover text template strings for each z-value in matrix 
+    topic_names=topics_df.topic_name.tolist()
+    hovertext_usr = []
+    for yi, yy in enumerate(user_topic_counts_pct.index.tolist()):
+        hovertext_usr.append(list())
+        for xi, xx in enumerate(topic_names):
+            hovertext_usr[-1].append('<b>Topic:</b> {}<br />'
+                                    '<b>User:</b> {}<br />'
+                                    '<b>Message Proportion:</b> {}'.format(xx, yy, z_usr[yi][xi]))
+
+        # plot heatmap
+    fig = px.imshow(user_topic_counts_pct, 
+                    color_continuous_scale="bluyl",
+                    width=650,
+                    height=500,
+                    aspect="auto")
+            
+    fig.update_layout(
+        margin=dict(l=20, 
+                    r=0,  
+                    b=20, 
+                    t=10,
+                    pad=3),
+        coloraxis=dict(colorbar=dict(thickness=15,
+                                    xpad=2)))
+
+    fig.update_traces(
+        hovertemplate=None, # set this to None in order to use custom hover text       
+        text=hovertext_usr,
+        hoverinfo="text") 
+
+    return fig
+
+    
+
+@app.callback(
+    Output("topics_features", "figure"),
+    Output("topics_heatmap", "figure"),
+    [Input("topic-amount-input", "value"),
+     Input("feature-amount-input", "value"),
+    ],
+)
+def comp_topic_chart(topics, features):
+    TOPIC, FEATURES = extract_topics(pre_df, topics, features)
+    expl_lables = [f'Topic {i}' for i in len(TOPIC)]
+    data = TOPIC['topic'].value_counts()
+    sum_value = data.sum()
+    data = data.T   
+    
+    labels=[]
+    fracs=[]
+    explode=[]
+    
+    for index,value in data.items():
+        labels.append('{0}.{1} - {2:.2f} % ({3} екземплярів)'.format(index,expl_lables[index],(value/sum_value*100),value))
+        fracs.append(value)
+        explode.append(0.1)
+
+
+    fig = px.pie(
+        names=labels,
+        values=fracs,
+        title=f"Діаграма розподілу на класи за Топіком"
+    )
+    fig.update_traces(textposition='inside', marker=dict(colors=col_pal))
+    fig.update_layout(uniformtext_minsize=12, uniformtext_mode='hide')
+
+    heatmap = topic_heatmap(TOPIC)
+    
+    return fig, heatmap 
 
 if __name__ == "__main__":
     app.run_server(debug=True)

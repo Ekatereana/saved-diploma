@@ -34,6 +34,7 @@ AUTHOR_COUNDER = 0
 CHAT_FILE_PATH = './data/processed-messages-v1.json'
 JAVA_KPI_FILE_PATH = './data/processed-messages-kpi-java.json'
 
+
 def load_stopwords():
     with open('sources/stopwords_ua.txt', encoding='utf-8') as file:
         stopwords_ua = file.read().splitlines()
@@ -79,8 +80,6 @@ def owns_by(user):
         AUTHOR_COUNDER = AUTHOR_COUNDER + 1
     
     return author_dict[user] 
-
-
 
 def preprocess_data(file_path):
 
@@ -233,6 +232,12 @@ def get_topic_words(vectorizer, svd, n_top_words):
         topics.append(top_words)
     return topics
 
+def get_topic_pretty_print(topics):
+    topic_list = []
+    for i, topic in enumerate(topics):
+        topic_list.append(f'Topic {i}: {", ".join(topic)}\n')
+    return topic_list
+
 #  DATA TESTING
 
 def classification_test(comp_df):
@@ -248,28 +253,25 @@ def classification_test(comp_df):
                 print ('Найважливіші токени для класифікації за колонкою -',y_column)
                 model.show_most_informative_features(10) 
 
-def topics_test(comp_df):
-    # print(comp_df.head(10))
+def extract_topics(comp_df, components, topic_features):
     comp_df['tokens'] = comp_df.text.apply(wrap_on_ua_tokenizer)
-    # print(comp_df.head(10))
     comp_df['tone'] = comp_df.tokens.apply(calculate_sentiment)
     comp_df['clean_text'] = comp_df.tokens.str.join(' ')
 
     tfidf_vectorizer = TfidfVectorizer()
     X = tfidf_vectorizer.fit_transform(comp_df.clean_text)
-    svd_vectorizer = TruncatedSVD(n_components=100, random_state=42)
+    svd_vectorizer = TruncatedSVD(n_components=components, random_state=42)
     X_lsa = svd_vectorizer.fit_transform(X)
-    print(X_lsa)
 
-    topics = get_topic_words(tfidf_vectorizer, svd_vectorizer, 10)
-    for i, topic in enumerate(topics):
-        print(f'Topic {i}: {", ".join(topic)}')
+    topics = get_topic_words(tfidf_vectorizer, svd_vectorizer, topic_features)
+    comp_df['topic'] = X_lsa.argmax(axis=1)
+    return comp_df, get_topic_pretty_print(topics)
 
 
 def main():
 
     comp_df = preprocess_data(JAVA_KPI_FILE_PATH)
-    topics_test(comp_df)
+    extract_topics(comp_df)
 
     
 if __name__ == "__main__":
