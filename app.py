@@ -3,7 +3,7 @@ from dash import dcc, html, Input, Output, callback
 import matplotlib.colors as mcolors
 import dash_bootstrap_components as dbc
 from sklearn.manifold import TSNE
-from helpers import ngrams_info, preprocess_data, stop_words, author_dict, extract_topics, CHAT_FILE_PATH, JAVA_KPI_FILE_PATH
+from helpers import ngrams_info, preprocess_data, stop_words, author_dict, extract_topics, CHAT_FILE_PATH, JAVA_KPI_FILE_PATH, build_ngrams_per_author
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -17,7 +17,7 @@ import dash_cytoscape as cyto
 
 col_pal = px.colors.sequential.Pinkyl
 # vects_df = ngrams_info(pre_df['text'], n=2) 
-pre_df = preprocess_data(CHAT_FILE_PATH)
+pre_df = preprocess_data(JAVA_KPI_FILE_PATH)
 unique_owns_by_values = pre_df['owns_by'].unique()
 
 
@@ -140,7 +140,8 @@ topics_chart = dbc.Card(
                 ),
                 dbc.Row(
                     [dbc.Col(dcc.Graph(id="topics_features")),
-                    dbc.Col(dcc.Graph(id="topics_heatmap"))],
+                    # dbc.Col(dcc.Graph(id="topics_heatmap"))
+                    ],
                     style={"marginTop": "20px"} 
                 ),
                 
@@ -150,7 +151,113 @@ topics_chart = dbc.Card(
     ],
     style={"marginBottom": "20px"}  # Add space between cards
  )
+# ngrams_per_author = dbc.Card(
+#     [
+#         dbc.CardHeader(html.H5("Визначні ngram-и за автором")),
+#         dbc.CardBody(
+#                         [
+#                             dcc.Loading(
+#                                 id="loading-ngrams-per-author",
+#                                 children=[
+#                                     dbc.Row(
+#                                             [
+                                                
+#                                                  dbc.Col(
+#                                                         [
+#                                                             dbc.Label(html.P("Оберіть авторa для порівняння:")),
+#                                                             dcc.Dropdown(
+#                                                                 id="author",
+#                                                                 options=[
+#                                                                     {"label": i, "value": i}
+#                                                                     for i in pre_df['owns_by'].unique()
+#                                                                 ],
+#                                                                 value = 1,
+#                                                             )
+#                                                         ],
+#                                                         md=6,
+#                                                         style = {"marginBottom": "20px"}
+#                                                     ),
+#                                                     dbc.Col(
+#                                                         [
+#                                                             dbc.Label(html.P("Введіть розряд ngram-и:")),
+#                                                             dbc.Input(
+#                                                                 id="ngram",
+#                                                                 type="number",
+#                                                                 value = 2,
+#                                                             )
+#                                                         ],
+#                                                         md=6,
+#                                                         style = {"marginBottom": "20px"}
+#                                                     ),
+#                                                 ],
 
+#                                                 align = "center",
+#                                             ),
+#                                             dcc.Graph(id="ngrams_per_author"),
+
+#                                 ])])
+#     ],
+#     style={"marginBottom": "20px"}
+#     )
+compare_authors_by_bigrams = dbc.Card(
+                        [
+                            dbc.CardHeader(html.H5("Порівняльна діаграма біграм характерних для авторів")),
+                            dbc.CardBody(
+                                [
+                                    dcc.Loading(
+                                        id="loading-bigrams-comps",
+                                        children=[
+                                            dbc.Alert(
+                                                "Something's gone wrong! Give us a moment, but try loading this page again if problem persists.",
+                                                id="no-data-alert-bigrams_comp",
+                                                color="warning",
+                                                style={"display": "none"},
+                                            ),
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(html.P("Оберіть авторів для порівняння:"), md=12),
+                                                    dbc.Col(
+                                                        [
+                                                            dcc.Dropdown(
+                                                                id="bigrams-comp_1",
+                                                                options=[
+                                                                    {"label": i, "value": i}
+                                                                    for i in pre_df['owns_by'].unique()
+                                                                ],
+                                                                value = 1,
+                                                            )
+                                                        ],
+                                                        md=6,
+                                                        style = {"marginBottom": "20px"}
+                                                    ),
+                                                    dbc.Col(
+                                                        [
+                                                            dcc.Dropdown(
+                                                                id="bigrams-comp_2",
+                                                                options=[
+                                                                    {"label": i, "value": i}
+                                                                    for i in pre_df['owns_by'].unique()
+                                                                ],
+                                                                value = 0,
+                                                            )
+                                                        ],
+                                                        md=6,
+                                                        style = {"marginBottom": "20px"}
+                                                    ),
+                                                ],
+                                                align = "center",
+                                            ),
+                                            dcc.Graph(id="bigrams-comps"),
+                                        ],
+                                        type="default",
+                                    )
+                                ],
+                                style={"marginTop": 0, "marginBottom": 0},
+                            ),
+                        ],
+                        style={"marginBottom": "20px"}
+
+                    )
 
 app.layout = html.Div([
         navbar,
@@ -221,69 +328,8 @@ app.layout = html.Div([
                     )
                 )
             ),
-            dbc.Row(
-                dbc.Col(
-                    dbc.Card(
-                        [
-                            dbc.CardHeader(html.H5("Порівняльна діаграма біграм характерних для авторів")),
-                            dbc.CardBody(
-                                [
-                                    dcc.Loading(
-                                        id="loading-bigrams-comps",
-                                        children=[
-                                            dbc.Alert(
-                                                "Something's gone wrong! Give us a moment, but try loading this page again if problem persists.",
-                                                id="no-data-alert-bigrams_comp",
-                                                color="warning",
-                                                style={"display": "none"},
-                                            ),
-                                            dbc.Row(
-                                                [
-                                                    dbc.Col(html.P("Оберіть авторів для порівняння:"), md=12),
-                                                    dbc.Col(
-                                                        [
-                                                            dcc.Dropdown(
-                                                                id="bigrams-comp_1",
-                                                                options=[
-                                                                    {"label": i, "value": i}
-                                                                    for i in pre_df['owns_by'].unique()
-                                                                ],
-                                                                value = 1,
-                                                            )
-                                                        ],
-                                                        md=6,
-                                                        style = {"marginBottom": "20px"}
-                                                    ),
-                                                    dbc.Col(
-                                                        [
-                                                            dcc.Dropdown(
-                                                                id="bigrams-comp_2",
-                                                                options=[
-                                                                    {"label": i, "value": i}
-                                                                    for i in pre_df['owns_by'].unique()
-                                                                ],
-                                                                value = 0,
-                                                            )
-                                                        ],
-                                                        md=6,
-                                                        style = {"marginBottom": "20px"}
-                                                    ),
-                                                ],
-                                                align = "center",
-                                            ),
-                                            dcc.Graph(id="bigrams-comps"),
-                                        ],
-                                        type="default",
-                                    )
-                                ],
-                                style={"marginTop": 0, "marginBottom": 0},
-                            ),
-                        ],
-                        style={"marginBottom": "20px"}
-
-                    )
-                )
-            ),
+            # ngrams_per_author,
+            compare_authors_by_bigrams,
         ],
         className="mt-12",
         )
@@ -467,6 +513,18 @@ def update_wordcloud_plot(value):
 def vector_to_string(vector):
     return '_'.join(map(str, vector))
 
+
+# @app.callback(
+#     Output("ngrams_per_author", "figure"),
+#     [Input("ngram", "value"), Input("author", "value")],
+# )
+# def comp_ngrams_per_author(ngram, author):
+#     ngrams_df = build_ngrams_per_author(author, ngram);
+#     print(ngrams_df.head(10))
+#     fig = px.line(ngrams_df, x="ngram", y="count", color='author')
+#     return fig
+
+
 @app.callback(
     Output("bigrams-comps", "figure"),
     [Input("bigrams-comp_1", "value"), Input("bigrams-comp_2", "value")],
@@ -502,10 +560,9 @@ def comp_bigram_comparisons(comp_first, comp_second):
     fig.data[0]["hovertemplate"] = fig.data[0]["hovertemplate"][:-14]
     return fig
 
-def topic_heatmap(topics_df):
+def topic_heatmap(topics_df, n_topics):
 
-    n_topics = len(topics_df)
-    user_topic_counts = pd.pivot_table(data=tweets_df, 
+    user_topic_counts = pd.pivot_table(data=topics_df, 
                                    values='text', 
                                    index='from', 
                                    columns='topic', 
@@ -525,7 +582,7 @@ def topic_heatmap(topics_df):
     z_usr = user_topic_counts_pct.values.tolist()
 
     # create list of hover text template strings for each z-value in matrix 
-    topic_names=topics_df.topic_name.tolist()
+    topic_names=topics_df.topic.tolist()
     hovertext_usr = []
     for yi, yy in enumerate(user_topic_counts_pct.index.tolist()):
         hovertext_usr.append(list())
@@ -561,15 +618,15 @@ def topic_heatmap(topics_df):
 
 @app.callback(
     Output("topics_features", "figure"),
-    Output("topics_heatmap", "figure"),
+    # Output("topics_heatmap", "figure"),
     [Input("topic-amount-input", "value"),
      Input("feature-amount-input", "value"),
     ],
 )
 def comp_topic_chart(topics, features):
     TOPIC, FEATURES = extract_topics(pre_df, topics, features)
-    expl_lables = [f'Topic {i}' for i in len(TOPIC)]
     data = TOPIC['topic'].value_counts()
+    expl_lables = [f'Topic {i}' for i in range(topics)]
     sum_value = data.sum()
     data = data.T   
     
@@ -591,9 +648,9 @@ def comp_topic_chart(topics, features):
     fig.update_traces(textposition='inside', marker=dict(colors=col_pal))
     fig.update_layout(uniformtext_minsize=12, uniformtext_mode='hide')
 
-    heatmap = topic_heatmap(TOPIC)
+    # heatmap = topic_heatmap(TOPIC, topics)
     
-    return fig, heatmap 
+    return fig
 
 if __name__ == "__main__":
     app.run_server(debug=True)

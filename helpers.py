@@ -23,6 +23,7 @@ from uk_stemmer import UkStemmer
 import nltk
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
+import plotly.graph_objs as go
 
 nltk.download('punkt')
 
@@ -145,11 +146,22 @@ def ngrams_info(series,n=1,most_common=50,ua_stemmer=True,stop_words=stop_words)
     common_tokens = words.most_common(most_common)
     print ('Кількість токенів: ',words.N())
     print ('Кількість унікальних токенів: ',words.B())
-    print ('Найбільш уживані токени: ', common_tokens)
+    # print ('Найбільш уживані токени: ', common_tokens)
     # words.plot (most_common, cumulative = True)
     words_df = pd.DataFrame(list(common_tokens), columns=["ngram", "count"])
     # words_df = words_df.sort_values(by="count", ascending=False)
     return words_df
+
+def build_ngrams_per_author(pre_df, author, n):
+
+
+    # Call ngrams_info for each unique 'owns_by' value
+    
+    author_df = pre_df[pre_df['owns_by'] == author]
+    ngrams_df = ngrams_info(author_df['text'], n=n)
+     
+    
+    return ngrams_df
 
 def bag_of_words(document_tokens,word_features):
         """ Return the dict of bag_of_words. 
@@ -236,6 +248,7 @@ def get_topic_pretty_print(topics):
     topic_list = []
     for i, topic in enumerate(topics):
         topic_list.append(f'Topic {i}: {", ".join(topic)}\n')
+        print(f'Topic {i}: {", ".join(topic)}\n')
     return topic_list
 
 #  DATA TESTING
@@ -270,8 +283,10 @@ def extract_topics(comp_df, components, topic_features):
 
 def main():
 
-    comp_df = preprocess_data(JAVA_KPI_FILE_PATH)
-    extract_topics(comp_df)
+    comp_df = preprocess_data(CHAT_FILE_PATH)
+    classification_test(comp_df)
+
+    # extract_topics(comp_df)
 
     
 if __name__ == "__main__":
