@@ -2,7 +2,7 @@ import json
 import codecs
 import re
   
-with open('./data/kpi-java.json', encoding='utf-8') as fh:
+with open('./data/result.json', encoding='utf-8') as fh:
     data = json.load(fh)
 
 
@@ -16,7 +16,7 @@ response = rreplace(response, "}", "}\n", 1)
 
 
 # save
-writefile = codecs.open('./data/processed-messages-kpi-java.json', 'w', 'utf-8')
+writefile = codecs.open('./data/processed-messages-nlp-uk.json', 'w', 'utf-8')
 
 writefile.write(response)
 

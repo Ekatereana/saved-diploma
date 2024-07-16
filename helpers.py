@@ -11,29 +11,28 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 sh.setFormatter(formatter)
 root_logger.addHandler(sh)
 
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
-from sklearn.manifold import TSNE
-import json
 import re
-import random
-from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
+from sklearn.model_selection import train_test_split
 from uk_stemmer import UkStemmer
 import nltk
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
-import plotly.graph_objs as go
+col_pal = px.colors.sequential.Pinkyl
 
+pd.options.plotting.backend = "plotly"
 nltk.download('punkt')
 
 desired_width = 320
 pd.set_option("display.max_columns", 20)
 pd.set_option("display.width", desired_width)
 author_dict = {}
-AUTHOR_COUNDER = 0
-CHAT_FILE_PATH = './data/processed-messages-v1.json'
+CHAT_FILE_PATH = './data/processed-messages-private-chat.json'
 JAVA_KPI_FILE_PATH = './data/processed-messages-kpi-java.json'
+NLP_UKRAINE_FILE_PATH = './data/processed-messages-nlp-community-chat.json'
 
 
 def load_stopwords():
@@ -43,66 +42,15 @@ def load_stopwords():
         stopwords_ru = file.read().splitlines()
     return set(stopwords_ua).union(set(stopwords_ru))
 
+STOP_WORDS = load_stopwords()
 
-stop_words = load_stopwords()
-
-# DATA PREPROCESSING
-
-def get_media_mapping(media_type):
-    if media_type == "sticker" :return 1
-    elif media_type == "annimation" : return 2
-    elif media_type == "video_message": return 3
-    if media_type == "voice_message" : return 4
-    elif media_type == "video_file" : return 4
-    else: return 1000
-
-def get_message_class(media_type, photo_attached):
-    """returns class identifier of the message
-    0 - plain message, only text
-    1 - sticker
-    2 - annimation
-    3 - video_message
-    4 - voice_message
-    5 - video_file
-    6 - photo
-    1000 - other
-    """
-    if bool(photo_attached): return 6
-    if not bool(media_type): return 0
-    return get_media_mapping(media_type)
-
-def owns_by(user):
-    
-    """returns author class identifier of the message
-    """
-    global AUTHOR_COUNDER
-    if user not in author_dict: 
-        author_dict[user] = AUTHOR_COUNDER
-        AUTHOR_COUNDER = AUTHOR_COUNDER + 1
-    
-    return author_dict[user] 
-
-def preprocess_data(file_path):
-
-    with open(file_path, encoding='UTF-8') as data_file:
-        data = json.load(data_file)
-        comp_df = pd.DataFrame(data['data'])
-
-    comp_df = comp_df[["id", "type", "from", "text", "media_type", "photo", "date"]].fillna("")
-
-    # Apply the transformations and fill NaN values with 0
-    comp_df["owns_by"] = comp_df.apply(lambda x: owns_by(x["from"]), axis=1)
-    comp_df["message_class"] = comp_df.apply(lambda x: get_message_class(x["media_type"], x["photo"]), axis=1)
-
-    # Fill NaN values with 0 in specific columns
-    columns_to_fill = ["id", "type", "owns_by", "text", "message_class"]
-    comp_df[columns_to_fill] = comp_df[columns_to_fill].fillna(0)
-    comp_df['text'] = comp_df['text'].astype(str)
-    return comp_df
 
 # BAG OF WORDS AND CLASSIFICATION
 
-def ua_tokenizer(text,ua_stemmer=True,stop_words=[]):
+LOL_pattern = r'(?![ax]+$).*$'
+
+
+def ua_tokenizer(text,ua_stemmer=True,stop_words=STOP_WORDS):
     """ Tokenizer for Ukrainian language, returns only alphabetic tokens. 
     
     Keyword arguments:
@@ -117,17 +65,29 @@ def ua_tokenizer(text,ua_stemmer=True,stop_words=[]):
     text=re.sub(r"""([0-9])([\u0400-\u04FF]|[A-z])""", ' ', text)
     text=re.sub(r"""([\u0400-\u04FF]|[A-z])([0-9])""", ' ', text)
     text=re.sub(r"""[\-.,:+*/_]""", ' ', text)
+    
     for word in nltk.word_tokenize(text): 
         if word.isalpha():
-            word=word.lower() 
-            if ua_stemmer is True:      
-                word=UkStemmer().stem_word(word)
-            if word not in stop_words:
+            word=word.lower()
+            if word not in stop_words and re.match(LOL_pattern, word): 
+                if ua_stemmer is True:      
+                    word=UkStemmer().stem_word(word)
                 tokenized_list.append(word) 
     return tokenized_list
 
+def build_ngram_freq(series, n = 1, ua_stemmer = True, stop_words = STOP_WORDS):
+    print (n,'- grams')
+    print ('ua_stemmer:',ua_stemmer)
+    words= series.astype(str).str.cat(sep=' ')
+    print ('Кількість символів: ',len(words))
+    words=nltk.ngrams(ua_tokenizer(words,ua_stemmer=ua_stemmer,stop_words=stop_words),n)
+    words=nltk.FreqDist(words)
+    print ('Кількість токенів: ',words.N())
+    print ('Кількість унікальних токенів: ',words.B())
+    return words
 
-def ngrams_info(series,n=1,most_common=50,ua_stemmer=True,stop_words=stop_words):
+
+def ngrams_info(series,n=1,most_common=50,ua_stemmer=True,stop_words=STOP_WORDS):
     """ ngrams_info - Show detailed information about string pandas.Series column. 
     
     Keyword arguments:
@@ -137,19 +97,11 @@ def ngrams_info(series,n=1,most_common=50,ua_stemmer=True,stop_words=stop_words)
     stop_words -- list of stop words (default [])
         
     """
-    print (n,'- grams')
-    print ('ua_stemmer:',ua_stemmer)
-    words= series.astype(str).str.cat(sep=' ')
-    print ('Кількість символів: ',len(words))
-    words=nltk.ngrams(ua_tokenizer(words,ua_stemmer=ua_stemmer,stop_words=stop_words),n)
-    words=nltk.FreqDist(words)
+    words = build_ngram_freq(series, n = n)
     common_tokens = words.most_common(most_common)
-    print ('Кількість токенів: ',words.N())
-    print ('Кількість унікальних токенів: ',words.B())
-    # print ('Найбільш уживані токени: ', common_tokens)
-    # words.plot (most_common, cumulative = True)
+    print ('Найбільш уживані токени: ', common_tokens)
+    # words.plot(most_common, cumulative = True, color = "red")
     words_df = pd.DataFrame(list(common_tokens), columns=["ngram", "count"])
-    # words_df = words_df.sort_values(by="count", ascending=False)
     return words_df
 
 def build_ngrams_per_author(pre_df, author, n):
@@ -158,7 +110,7 @@ def build_ngrams_per_author(pre_df, author, n):
     # Call ngrams_info for each unique 'owns_by' value
     
     author_df = pre_df[pre_df['owns_by'] == author]
-    ngrams_df = ngrams_info(author_df['text'], n=n)
+    ngrams_df= ngrams_info(author_df['text'], n=n)
      
     
     return ngrams_df
@@ -179,7 +131,7 @@ def bag_of_words(document_tokens,word_features):
         
         return features
 
-def label_features(dataframe, X_column,y_column, stop_words=stop_words,ua_stemmer=True,most_common=1000, n=1):
+def label_features(dataframe, X_column,y_column, stop_words=STOP_WORDS,ua_stemmer=True,most_common=1000, n=1):
     words=dataframe[X_column].str.cat(sep=' ')
     words=nltk.ngrams(ua_tokenizer(words,ua_stemmer=ua_stemmer,stop_words=stop_words),n=n)
     words=nltk.FreqDist(words)
@@ -194,7 +146,7 @@ def label_features(dataframe, X_column,y_column, stop_words=stop_words,ua_stemme
         labeled_featuresets.append((bag_of_words(row[X_column],word_features=word_features), row[y_column]))  
     return labeled_featuresets
 
-def nltk_classifiers(dataframe,X_column,y_column,classifier=nltk.NaiveBayesClassifier,n=1,stop_words=stop_words,ua_stemmer=True,most_common=1000): 
+def nltk_classifiers(dataframe,X_column,y_column,classifier=nltk.NaiveBayesClassifier,n=1,stop_words=STOP_WORDS,ua_stemmer=True,most_common=1000): 
     
         
     labeled_featuresets = label_features(dataframe,X_column,y_column)
@@ -221,7 +173,7 @@ def nltk_classifiers(dataframe,X_column,y_column,classifier=nltk.NaiveBayesClass
 # CLASTERISATION
 
 def wrap_on_ua_tokenizer(text):
-    return ua_tokenizer(text,ua_stemmer=True,stop_words=stop_words)
+    return ua_tokenizer(text,ua_stemmer=True,stop_words=STOP_WORDS)
 
 ua_tone_dict = pd.read_csv('https://raw.githubusercontent.com/lang-uk/tone-dict-uk/master/tone-dict-uk.tsv', delimiter='\t', names=['word', 'score'], index_col=0)
 ru_tone_dict = pd.read_csv('https://raw.githubusercontent.com/text-machine-lab/sentimental/master/sentimental/word_list/russian.csv', delimiter=',', index_col=0)
@@ -247,6 +199,7 @@ def get_topic_words(vectorizer, svd, n_top_words):
 def get_topic_pretty_print(topics):
     topic_list = []
     for i, topic in enumerate(topics):
+        topic = [string for string in topic if re.match(LOL_pattern, string)]
         topic_list.append(f'Topic {i}: {", ".join(topic)}\n')
         print(f'Topic {i}: {", ".join(topic)}\n')
     return topic_list
@@ -280,13 +233,33 @@ def extract_topics(comp_df, components, topic_features):
     comp_df['topic'] = X_lsa.argmax(axis=1)
     return comp_df, get_topic_pretty_print(topics)
 
+def vector_to_string(vector):
+    return '_'.join(map(str, vector))
 
 def main():
 
     comp_df = preprocess_data(CHAT_FILE_PATH)
-    classification_test(comp_df)
+    temp_df = ngrams_info(comp_df['text'],n=3)
 
-    # extract_topics(comp_df)
+    temp_df['ngram'] = temp_df['ngram'].apply(vector_to_string)
+    fig = px.bar(
+        temp_df,
+        title="Діаграма найчастіше вживаних словосполучень",
+        x="ngram",
+        y="count",
+        template="plotly_white",
+        color_discrete_sequence=col_pal,
+        labels={"count": "Кількість використання:", "ngram": "N-Gram"},
+    )
+    fig.update_layout(legend=dict(x=0.1, y=1.1), legend_orientation="h")
+    fig.update_yaxes(title="", showticklabels=False)
+    
+    fig.show()
+    # classification_test(comp_df)
+    # for i in range(1,10):
+        # print(random.uniform(0.35, 0.871))
+    TOPIC, FEATURES = extract_topics(comp_df, 10, 5)
+    print(FEATURES)
 
     
 if __name__ == "__main__":
